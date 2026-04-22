@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
-from app.models.target import Target
+from app.models.target_model import Target
 import uuid
 
 # CREATE — insert new target
