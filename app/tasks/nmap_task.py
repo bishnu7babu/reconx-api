@@ -2,7 +2,7 @@ from app.celery_app import celery_app
 from app.database import SyncSessionLocal
 from app.models.scan_model import Scan
 from app.models.result_model import Result
-from app.models.target_model import Target   # ← add this
+from app.models.target_model import Target
 from app.models.user_model import User
 from sqlalchemy import select
 from uuid import UUID
@@ -10,8 +10,8 @@ import subprocess
 import uuid
 
 
-@celery_app.task
-def scan_task(scan_id: str, target_id: str, host: str):
+@celery_app.task()
+def nmap_task(scan_id: str, target_id: str, host: str):
 
     db = SyncSessionLocal()
     scan = None   # ← initialize as None so except block works safely

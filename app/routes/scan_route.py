@@ -5,8 +5,9 @@ from app.database import get_db
 from app.core.dependencies import get_current_user
 from app.services.scan_service import create_scan_record
 from datetime import datetime
-from app.tasks.scan_task import scan_task
-from app.services.target_service import get_target_by_id 
+from app.tasks.nmap_task import nmap_task
+from app.services.target_service import get_target_by_id
+from app.tasks.theharvester_task import theharvester_task
 
 router = APIRouter()
 
@@ -19,7 +20,9 @@ async def create_scan(target_id: UUID, db: AsyncSession = Depends(get_db), user_
 
     started_at = datetime.now()
     scan = await create_scan_record(db=db, target_id=str(target_id), status="queued", tools_used=[], started_at=started_at)
-    scan_task.delay(str(scan.id), str(target_id), target.host)
+    nmap_task.delay(str(scan.id), str(target_id), target.host)
+
+    theharvester_task.delay(str(scan.id), str(target_id), target.host)
 
     return {
         "scan_id": scan.id,
