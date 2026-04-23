@@ -8,6 +8,7 @@ from datetime import datetime
 from app.tasks.nmap_task import nmap_task
 from app.services.target_service import get_target_by_id
 from app.tasks.theharvester_task import theharvester_task
+from app.tasks.subfinder_task import subfinder_task
 
 router = APIRouter()
 
@@ -23,6 +24,8 @@ async def create_scan(target_id: UUID, db: AsyncSession = Depends(get_db), user_
     nmap_task.delay(str(scan.id), str(target_id), target.host)
 
     theharvester_task.delay(str(scan.id), str(target_id), target.host)
+
+    subfinder_task.delay(str(scan.id), str(target_id), target.host)
 
     return {
         "scan_id": scan.id,

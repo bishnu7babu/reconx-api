@@ -7,5 +7,9 @@ celery_app = Celery(
     "reconx",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.nmap_task", "app.tasks.theharvester_task"]
+    include=[
+        "app.tasks.nmap_task",
+        "app.tasks.theharvester_task",
+        "app.tasks.subfinder_task"
+    ]
 )
