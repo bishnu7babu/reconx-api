@@ -263,5 +263,5 @@ Results  → id, scan_id (FK), tool, raw_output, parsed_data, ai_summary, risk_s
 
 **Bishnu** (shadow) — Full-stack developer & offensive security learner
 
-- GitHub: [@yourusername](https://github.com/yourusername)
-- LinkedIn: [your-linkedin](https://linkedin.com/in/your-linkedin)
+- GitHub: [@bishnu7babu](https://github.com/bishnu7babu)
+- LinkedIn: [@Bishnu Babu](https://linkedin.com/in/bishnu-babu-75b9ba21a)
