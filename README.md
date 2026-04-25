@@ -1,27 +1,28 @@
 # ReconX API
-
-> AI-powered reconnaissance automation platform — Phase 2: Real Tool Execution
-
+ 
+> AI-powered reconnaissance automation platform — Phase 3: AI Attack Surface Analysis
+ 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?style=flat-square&logo=fastapi)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue?style=flat-square&logo=postgresql)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue?style=flat-square&logo=docker)
 ![Celery](https://img.shields.io/badge/Celery-5.6+-green?style=flat-square&logo=celery)
 ![Redis](https://img.shields.io/badge/Redis-7-red?style=flat-square&logo=redis)
+![Gemini](https://img.shields.io/badge/AI-Gemini%202.5-blue?style=flat-square&logo=google)
 ![JWT](https://img.shields.io/badge/Auth-JWT-orange?style=flat-square)
-
+ 
 ---
-
+ 
 ## Overview
-
-ReconX is a production-grade, AI-powered reconnaissance automation API built with FastAPI. It allows security professionals to manage scan targets, execute real security tool scans (nmap, theHarvester, subfinder), and retrieve structured results via a REST API.
-
-Scans run asynchronously via Celery + Redis — the API responds immediately while tools execute in the background. Results are stored in PostgreSQL and will feed into an AI-generated attack surface summary in the next phase.
-
+ 
+ReconX is a production-grade, AI-powered reconnaissance automation API built with FastAPI. It allows security professionals to manage scan targets, execute real security tool scans (nmap, theHarvester, subfinder), and retrieve AI-generated attack surface summaries with risk scores — all via a clean REST API.
+ 
+Scans run asynchronously via Celery + Redis. Raw tool outputs are analyzed by Google Gemini 2.5 Flash to generate structured threat narratives, risk scores, and prioritized findings.
+ 
 ---
-
+ 
 ## Tech Stack
-
+ 
 | Layer | Technology |
 |---|---|
 | Backend | FastAPI + Python 3.11+ |
@@ -30,14 +31,14 @@ Scans run asynchronously via Celery + Redis — the API responds immediately whi
 | Auth | JWT (python-jose) + bcrypt |
 | Task Queue | Celery + Redis |
 | Recon Tools | nmap, theHarvester, subfinder |
+| AI Layer | Google Gemini 2.5 Flash |
 | Validation | Pydantic v2 |
 | Infra | Docker + Docker Compose |
-| AI Layer | OpenAI API (Phase 3) |
-
+ 
 ---
-
+ 
 ## Features
-
+ 
 ### ✅ Phase 1 — Core API + Auth
 - JWT Authentication — register, login, token-based protected routes
 - bcrypt password hashing
@@ -46,7 +47,6 @@ Scans run asynchronously via Celery + Redis — the API responds immediately whi
 - User-scoped targets — users can only access their own data
 - Input validation via Pydantic schemas
 - Docker Compose — one-command PostgreSQL setup
-
 ### ✅ Phase 2 — Real Tool Execution
 - **nmap** — port scanning + service/version detection (~44s async)
 - **theHarvester** — email, DNS, IP, and subdomain recon (~21s async)
@@ -55,11 +55,17 @@ Scans run asynchronously via Celery + Redis — the API responds immediately whi
 - Scan status tracking — `queued → running → completed/failed`
 - Results saved to PostgreSQL per tool per scan
 - Non-blocking API — scan triggered in milliseconds, tools run in background
-
+### ✅ Phase 3 — AI Attack Surface Analysis
+- Raw scan results fed to **Google Gemini 2.5 Flash**
+- AI generates structured **threat narrative** (3-5 sentences)
+- **Risk score** 0-100 with risk level (Critical/High/Medium/Low)
+- **Top 3 key findings** with severity labels
+- Dedicated `/results/{scan_id}/ai-summary` endpoint
+- Prompt engineered specifically for penetration testing context
 ---
-
+ 
 ## How It Works
-
+ 
 ```
 POST /scan/{target_id}
       ↓
@@ -67,19 +73,49 @@ API creates Scan record (status: queued)
 Returns scan_id immediately ← non-blocking
       ↓
 Celery dispatches 3 parallel tasks:
-  ├── nmap_task         → port scan    → save to results
-  ├── theharvester_task → recon        → save to results
-  └── subfinder_task    → subdomains   → save to results
+  ├── nmap_task         → port scan      → save to results
+  ├── theharvester_task → recon          → save to results
+  └── subfinder_task    → subdomains     → save to results
       ↓
 All tasks complete → status: completed
       ↓
-GET /results/{scan_id} → structured JSON results
+GET /results/{scan_id}            → raw tool outputs
+GET /results/{scan_id}/ai-summary → Gemini AI analysis
 ```
-
+ 
 ---
-
+ 
+## Example AI Output
+ 
+```json
+{
+  "scan_id": "170670cb-34af-426f-b7f6-40e948da166f",
+  "ai_summary": {
+    "threat_narrative": "HackerOne presents a broad and distributed attack surface, with its main domain effectively protected by Cloudflare. However, reconnaissance reveals numerous subdomains leveraging diverse third-party services like AWS, Google, Zendesk, and GitHub Pages. Some subdomains like api.hackerone.com appear to have direct IP exposure, potentially bypassing Cloudflare's protective layer for these critical services.",
+    "risk_score": 75,
+    "risk_level": "High",
+    "key_findings": [
+      {
+        "severity": "High",
+        "finding": "Extensive subdomains with direct IP exposure outside Cloudflare, increasing the likelihood of finding less-protected entry points."
+      },
+      {
+        "severity": "Medium",
+        "finding": "Significant reliance on third-party services introducing potential supply chain vulnerabilities and subdomain takeover risks."
+      },
+      {
+        "severity": "Low",
+        "finding": "Primary domain well-protected behind Cloudflare, obscuring origin server details."
+      }
+    ]
+  }
+}
+```
+ 
+---
+ 
 ## Project Structure
-
+ 
 ```
 reconx-api/
 ├── app/
@@ -95,14 +131,16 @@ reconx-api/
 │   ├── routes/
 │   │   ├── auth_route.py         # /auth/register, /auth/login
 │   │   ├── targets_route.py      # /targets CRUD
-│   │   └── scan_route.py         # /scan/{target_id}
+│   │   ├── scan_route.py         # /scan/{target_id}
+│   │   └── result_route.py       # /results/{scan_id} + ai-summary
 │   ├── schemas/
 │   │   ├── register_schema.py
 │   │   └── target_schema.py
 │   ├── services/
 │   │   ├── auth_service.py       # JWT + bcrypt
 │   │   ├── target_service.py     # Target CRUD
-│   │   └── scan_service.py       # Scan record management
+│   │   ├── scan_service.py       # Scan record management
+│   │   └── ai_service.py         # Gemini AI integration
 │   ├── tasks/
 │   │   ├── nmap_task.py          # nmap subprocess + result save
 │   │   ├── theharvester_task.py  # theHarvester subprocess + result save
@@ -118,145 +156,147 @@ reconx-api/
 ├── requirements.txt
 └── .env.example
 ```
-
+ 
 ---
-
+ 
 ## API Endpoints
-
+ 
 ### Auth
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | POST | `/auth/register` | Register new user, returns JWT | Public |
 | POST | `/auth/login` | Login, returns JWT | Public |
-
+ 
 ### Targets
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | POST | `/targets` | Add a new scan target | Bearer Token |
 | GET | `/targets` | List all targets for current user | Bearer Token |
 | DELETE | `/targets/{id}` | Delete a target | Bearer Token |
-
+ 
 ### Scans
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | POST | `/scan/{target_id}` | Trigger async scan (all 3 tools) | Bearer Token |
 | GET | `/scan/{scan_id}/status` | Check scan status | Bearer Token |
-
+ 
 ### Results
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/results/{scan_id}` | Get structured scan results | Bearer Token |
-
+| GET | `/results/{scan_id}` | Get raw structured results | Bearer Token |
+| GET | `/results/{scan_id}/ai-summary` | Get AI threat narrative + risk score | Bearer Token |
+ 
 ---
-
+ 
 ## Getting Started
-
+ 
 ### Prerequisites
 - Python 3.11+
 - Docker + Docker Compose
 - Redis (native install)
 - nmap, theHarvester, subfinder installed on system
-
+- Google Gemini API key (free at aistudio.google.com)
 ### 1. Clone the repo
 ```bash
 git clone https://github.com/yourusername/reconx-api.git
 cd reconx-api
 ```
-
+ 
 ### 2. Create virtual environment
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
-
+ 
 ### 3. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
-
+ 
 ### 4. Configure environment
 ```bash
 cp .env.example .env
 ```
-
+ 
 Edit `.env`:
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/reconx
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=your_super_secret_key_here
 JWT_EXPIRE_MINUTES=60
-OPENAI_API_KEY=your_openai_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
-
+ 
 ### 5. Start PostgreSQL via Docker
 ```bash
 docker-compose up -d
 ```
-
+ 
 ### 6. Run database migrations
 ```bash
 alembic upgrade head
 ```
-
+ 
 ### 7. Start the API
 ```bash
 uvicorn app.main:app --reload
 ```
-
+ 
 ### 8. Start Celery Worker (separate terminal)
 ```bash
 celery -A app.celery_app worker --loglevel=info
 ```
-
+ 
 API live at `http://localhost:8000`
 Swagger docs at `http://localhost:8000/docs`
-
+ 
 ---
-
-## Scan Flow Example
-
+ 
+## Full Scan Workflow
+ 
 ```bash
 # 1. Register
 POST /auth/register
 { "username": "shadow", "email": "shadow@example.com", "password": "password123" }
-
+ 
 # 2. Add target
 POST /targets
-{ "host": "example.com", "label": "Test Target" }
-
+{ "host": "hackerone.com", "label": "HackerOne" }
+ 
 # 3. Trigger scan — returns immediately
 POST /scan/{target_id}
 → { "scan_id": "...", "status": "queued" }
-
-# 4. Check status
-GET /scan/{scan_id}/status
-→ { "status": "running" }
-
-# 5. Get results after completion
+ 
+# 4. Wait for tools to complete (~45 seconds)
+ 
+# 5. Get raw results
 GET /results/{scan_id}
-→ nmap + theHarvester + subfinder structured output
+→ nmap + theHarvester + subfinder raw output
+ 
+# 6. Get AI analysis
+GET /results/{scan_id}/ai-summary
+→ threat narrative + risk score + key findings
 ```
-
+ 
 ---
-
+ 
 ## Database Schema
-
+ 
 ```
 Users    → id, username, email, password (hashed), created_at
 Targets  → id, user_id (FK), host, label, created_at
 Scans    → id, target_id (FK), status, tools_used, started_at, finished_at
 Results  → id, scan_id (FK), tool, raw_output, parsed_data, ai_summary, risk_score, created_at
 ```
-
+ 
 ---
-
+ 
 ## Roadmap
-
+ 
 - [x] **Phase 1** — Core API + JWT Auth + Target Management
 - [x] **Phase 2** — nmap + theHarvester + subfinder via Celery async queue
-- [ ] **Phase 3** — OpenAI API integration — AI attack surface summary + risk score
+- [x] **Phase 3** — Google Gemini AI attack surface summary + risk scoring
 - [ ] **Phase 4** — WebSocket live scan progress + PDF report export + AWS EC2 deploy
-
 ---
 
 ## Author
