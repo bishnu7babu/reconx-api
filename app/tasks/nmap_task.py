@@ -4,6 +4,7 @@ from app.models.scan_model import Scan
 from app.models.result_model import Result
 from app.models.target_model import Target
 from app.models.user_model import User
+from app.redis_app import publish_event
 from sqlalchemy import select
 from uuid import UUID
 import subprocess
@@ -27,11 +28,15 @@ def nmap_task(scan_id: str, target_id: str, host: str):
         scan.status = "running"
         db.commit()
 
+        publish_event(scan_id, "tool_started", "nmap", 10)
+
         nmap_output = run_nmap(host)
         save_result(db, scan_id, tool="nmap", raw=nmap_output)
 
         scan.status = "completed"
         db.commit()
+
+        publish_event(scan_id, "tool_completed", "nmap", 40)
 
     except Exception as e:
         if scan:

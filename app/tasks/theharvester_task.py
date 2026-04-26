@@ -4,6 +4,7 @@ from app.models.scan_model import Scan
 from sqlalchemy import select
 from app.models.target_model import Target
 from app.models.user_model import User
+from app.redis_app import publish_event
 from uuid import UUID
 import subprocess
 
@@ -25,11 +26,16 @@ def theharvester_task(scan_id: str, target_id: str, host: str):
 
         scan.status = "running"
         db.commit()
+
+        publish_event(scan_id, "tool_started", "theHarvester", 10)
+
         theharvester_output = run_theharvester(host)
         save_result(db, scan_id=scan_id, tool="theharvester",raw=theharvester_output)
 
         scan.status = "completed"
         db.commit()
+
+        publish_event(scan_id, "tool_complete", "theHarvester", 100)
 
     except Exception as e:
         if scan:
