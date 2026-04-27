@@ -1,6 +1,6 @@
 # ReconX API
  
-> AI-powered reconnaissance automation platform — Phase 3: AI Attack Surface Analysis
+> AI-powered reconnaissance automation platform — Fully Shipped 🚀
  
 ![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?style=flat-square&logo=fastapi)
@@ -8,16 +8,27 @@
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue?style=flat-square&logo=docker)
 ![Celery](https://img.shields.io/badge/Celery-5.6+-green?style=flat-square&logo=celery)
 ![Redis](https://img.shields.io/badge/Redis-7-red?style=flat-square&logo=redis)
-![Gemini](https://img.shields.io/badge/AI-Gemini%202.5-blue?style=flat-square&logo=google)
+![Gemini](https://img.shields.io/badge/AI-Gemini%202.5%20Flash-blue?style=flat-square&logo=google)
 ![JWT](https://img.shields.io/badge/Auth-JWT-orange?style=flat-square)
+![WebSocket](https://img.shields.io/badge/Realtime-WebSocket-purple?style=flat-square)
+![AWS](https://img.shields.io/badge/Deployed-AWS%20EC2-orange?style=flat-square&logo=amazonaws)
  
 ---
  
 ## Overview
  
-ReconX is a production-grade, AI-powered reconnaissance automation API built with FastAPI. It allows security professionals to manage scan targets, execute real security tool scans (nmap, theHarvester, subfinder), and retrieve AI-generated attack surface summaries with risk scores — all via a clean REST API.
+ReconX is a production-grade, AI-powered reconnaissance automation API built with FastAPI. Security professionals can manage targets, trigger real tool scans, receive live progress via WebSocket, get AI-generated attack surface summaries with risk scores, and download professional PDF reports — all via a clean REST API.
  
-Scans run asynchronously via Celery + Redis. Raw tool outputs are analyzed by Google Gemini 2.5 Flash to generate structured threat narratives, risk scores, and prioritized findings.
+Deployed and running on AWS EC2.
+ 
+---
+ 
+## Demo
+ 
+> Scan triggered on `hackerone.com` — AI risk score: **15/100 Medium**
+> Identified 58 subdomains, potential subdomain takeover risks via GitHub Pages, complex email infrastructure across Zendesk/AWS/Google.
+ 
+📄 **[View Sample PDF Report](./sample-report.pdf)**
  
 ---
  
@@ -32,8 +43,10 @@ Scans run asynchronously via Celery + Redis. Raw tool outputs are analyzed by Go
 | Task Queue | Celery + Redis |
 | Recon Tools | nmap, theHarvester, subfinder |
 | AI Layer | Google Gemini 2.5 Flash |
+| Realtime | WebSocket (Redis Pub/Sub) |
+| Reports | PDF (reportlab) |
 | Validation | Pydantic v2 |
-| Infra | Docker + Docker Compose |
+| Infra | Docker + Docker Compose + AWS EC2 |
  
 ---
  
@@ -60,8 +73,14 @@ Scans run asynchronously via Celery + Redis. Raw tool outputs are analyzed by Go
 - AI generates structured **threat narrative** (3-5 sentences)
 - **Risk score** 0-100 with risk level (Critical/High/Medium/Low)
 - **Top 3 key findings** with severity labels
-- Dedicated `/results/{scan_id}/ai-summary` endpoint
 - Prompt engineered specifically for penetration testing context
+### ✅ Phase 4 — WebSocket + PDF Reports + AWS Deploy
+- **WebSocket** — real-time scan progress via Redis Pub/Sub
+- JWT authentication on WebSocket connections via query parameter
+- Live events: `tool_started`, `tool_completed`, `scan_complete`
+- **PDF report** — professional downloadable report per scan
+- Report includes: scan info, AI summary, risk score, all tool outputs
+- **Deployed on AWS EC2** — production ready
 ---
  
 ## How It Works
@@ -73,88 +92,15 @@ API creates Scan record (status: queued)
 Returns scan_id immediately ← non-blocking
       ↓
 Celery dispatches 3 parallel tasks:
-  ├── nmap_task         → port scan      → save to results
-  ├── theharvester_task → recon          → save to results
-  └── subfinder_task    → subdomains     → save to results
+  ├── nmap_task         → port scan      → save + publish WebSocket event
+  ├── theharvester_task → recon          → save + publish WebSocket event
+  └── subfinder_task    → subdomains     → save + publish WebSocket event
       ↓
-All tasks complete → status: completed
+Client receives live progress via WebSocket
       ↓
 GET /results/{scan_id}            → raw tool outputs
-GET /results/{scan_id}/ai-summary → Gemini AI analysis
-```
- 
----
- 
-## Example AI Output
- 
-```json
-{
-  "scan_id": "170670cb-34af-426f-b7f6-40e948da166f",
-  "ai_summary": {
-    "threat_narrative": "HackerOne presents a broad and distributed attack surface, with its main domain effectively protected by Cloudflare. However, reconnaissance reveals numerous subdomains leveraging diverse third-party services like AWS, Google, Zendesk, and GitHub Pages. Some subdomains like api.hackerone.com appear to have direct IP exposure, potentially bypassing Cloudflare's protective layer for these critical services.",
-    "risk_score": 75,
-    "risk_level": "High",
-    "key_findings": [
-      {
-        "severity": "High",
-        "finding": "Extensive subdomains with direct IP exposure outside Cloudflare, increasing the likelihood of finding less-protected entry points."
-      },
-      {
-        "severity": "Medium",
-        "finding": "Significant reliance on third-party services introducing potential supply chain vulnerabilities and subdomain takeover risks."
-      },
-      {
-        "severity": "Low",
-        "finding": "Primary domain well-protected behind Cloudflare, obscuring origin server details."
-      }
-    ]
-  }
-}
-```
- 
----
- 
-## Project Structure
- 
-```
-reconx-api/
-├── app/
-│   ├── core/
-│   │   └── dependencies.py       # JWT guard
-│   ├── db/
-│   │   └── base.py               # SQLAlchemy Base registry
-│   ├── models/
-│   │   ├── user_model.py
-│   │   ├── target_model.py
-│   │   ├── scan_model.py
-│   │   └── result_model.py
-│   ├── routes/
-│   │   ├── auth_route.py         # /auth/register, /auth/login
-│   │   ├── targets_route.py      # /targets CRUD
-│   │   ├── scan_route.py         # /scan/{target_id}
-│   │   └── result_route.py       # /results/{scan_id} + ai-summary
-│   ├── schemas/
-│   │   ├── register_schema.py
-│   │   └── target_schema.py
-│   ├── services/
-│   │   ├── auth_service.py       # JWT + bcrypt
-│   │   ├── target_service.py     # Target CRUD
-│   │   ├── scan_service.py       # Scan record management
-│   │   └── ai_service.py         # Gemini AI integration
-│   ├── tasks/
-│   │   ├── nmap_task.py          # nmap subprocess + result save
-│   │   ├── theharvester_task.py  # theHarvester subprocess + result save
-│   │   └── subfinder_task.py     # subfinder subprocess + result save
-│   ├── celery_app.py             # Celery + Redis configuration
-│   ├── config.py                 # Pydantic settings
-│   ├── database.py               # Async + Sync engine
-│   └── main.py                   # FastAPI entry point
-├── migrations/
-│   └── versions/
-├── docker-compose.yml
-├── alembic.ini
-├── requirements.txt
-└── .env.example
+GET /results/{scan_id}/ai-summary → Gemini AI analysis + risk score
+GET /results/{scan_id}/report.pdf → downloadable PDF report
 ```
  
 ---
@@ -185,6 +131,60 @@ reconx-api/
 |---|---|---|---|
 | GET | `/results/{scan_id}` | Get raw structured results | Bearer Token |
 | GET | `/results/{scan_id}/ai-summary` | Get AI threat narrative + risk score | Bearer Token |
+| GET | `/results/{scan_id}/report.pdf` | Download PDF report | Bearer Token |
+ 
+### Realtime
+| Protocol | Endpoint | Description | Auth |
+|---|---|---|---|
+| WebSocket | `/ws/scan/{scan_id}?token=JWT` | Live scan progress stream | Query Token |
+ 
+---
+ 
+## Project Structure
+ 
+```
+reconx-api/
+├── app/
+│   ├── core/
+│   │   └── dependencies.py       # JWT guard
+│   ├── db/
+│   │   └── base.py               # SQLAlchemy Base registry
+│   ├── models/
+│   │   ├── user_model.py
+│   │   ├── target_model.py
+│   │   ├── scan_model.py
+│   │   └── result_model.py
+│   ├── routes/
+│   │   ├── auth_route.py         # /auth endpoints
+│   │   ├── targets_route.py      # /targets CRUD
+│   │   ├── scan_route.py         # /scan trigger
+│   │   ├── result_route.py       # /results + ai-summary + PDF
+│   │   └── ws_route.py           # WebSocket live progress
+│   ├── schemas/
+│   │   ├── register_schema.py
+│   │   └── target_schema.py
+│   ├── services/
+│   │   ├── auth_service.py       # JWT + bcrypt
+│   │   ├── target_service.py     # Target CRUD
+│   │   ├── scan_service.py       # Scan record management
+│   │   ├── ai_service.py         # Gemini AI integration
+│   │   └── pdf_service.py        # PDF report generation
+│   ├── tasks/
+│   │   ├── nmap_task.py          # nmap subprocess + WebSocket events
+│   │   ├── theharvester_task.py  # theHarvester subprocess + events
+│   │   └── subfinder_task.py     # subfinder subprocess + events
+│   ├── celery_app.py             # Celery + Redis configuration
+│   ├── redis_app.py              # Redis Pub/Sub publisher
+│   ├── config.py                 # Pydantic settings
+│   ├── database.py               # Async + Sync engine
+│   └── main.py                   # FastAPI entry point
+├── migrations/
+│   └── versions/
+├── docker-compose.yml
+├── alembic.ini
+├── requirements.txt
+└── .env.example
+```
  
 ---
  
@@ -247,35 +247,29 @@ uvicorn app.main:app --reload
 celery -A app.celery_app worker --loglevel=info
 ```
  
+### 9. Connect WebSocket (browser console)
+```javascript
+const token = "your_jwt_token"
+const scan_id = "your_scan_id"
+const ws = new WebSocket(`ws://localhost:8000/ws/scan/${scan_id}?token=${token}`)
+ws.onmessage = (e) => console.log(JSON.parse(e.data))
+```
+ 
 API live at `http://localhost:8000`
 Swagger docs at `http://localhost:8000/docs`
  
 ---
  
-## Full Scan Workflow
+## Sample WebSocket Events
  
-```bash
-# 1. Register
-POST /auth/register
-{ "username": "shadow", "email": "shadow@example.com", "password": "password123" }
- 
-# 2. Add target
-POST /targets
-{ "host": "hackerone.com", "label": "HackerOne" }
- 
-# 3. Trigger scan — returns immediately
-POST /scan/{target_id}
-→ { "scan_id": "...", "status": "queued" }
- 
-# 4. Wait for tools to complete (~45 seconds)
- 
-# 5. Get raw results
-GET /results/{scan_id}
-→ nmap + theHarvester + subfinder raw output
- 
-# 6. Get AI analysis
-GET /results/{scan_id}/ai-summary
-→ threat narrative + risk score + key findings
+```json
+{ "event": "tool_started",   "tool": "nmap",         "progress": 10 }
+{ "event": "tool_started",   "tool": "theharvester",  "progress": 10 }
+{ "event": "tool_started",   "tool": "subfinder",     "progress": 10 }
+{ "event": "tool_completed", "tool": "theharvester",  "progress": 50 }
+{ "event": "tool_completed", "tool": "subfinder",     "progress": 70 }
+{ "event": "tool_completed", "tool": "nmap",          "progress": 90 }
+{ "event": "scan_complete",  "tool": "all",           "progress": 100 }
 ```
  
 ---
@@ -296,7 +290,7 @@ Results  → id, scan_id (FK), tool, raw_output, parsed_data, ai_summary, risk_s
 - [x] **Phase 1** — Core API + JWT Auth + Target Management
 - [x] **Phase 2** — nmap + theHarvester + subfinder via Celery async queue
 - [x] **Phase 3** — Google Gemini AI attack surface summary + risk scoring
-- [ ] **Phase 4** — WebSocket live scan progress + PDF report export + AWS EC2 deploy
+- [x] **Phase 4** — WebSocket live progress + PDF report export + AWS EC2 deploy
 ---
 
 ## Author
